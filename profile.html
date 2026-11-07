@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#ffffff">
+  <title>PROFILE | NPT48 OFFICIAL SITE</title>
+  <link rel="icon" type="image/png" href="assets/images/logo.png">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Comfortaa:wght@300;400;700&family=Noto+Sans+Thai:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/site.css">
+</head>
+<body>
+
+  <div id="site-header"></div>
+  <script src="assets/js/nav.js"></script>
+  <script src="assets/js/data.js"></script>
+  <script src="assets/js/reveal.js"></script>
+
+  <main class="page">
+    <h1 class="page-tit"><span>PROFILE</span></h1>
+
+    <div class="inner">
+      <!-- Member list -->
+      <div id="list-view">
+        <div class="category-list" id="teamTabs" role="tablist" aria-label="Filter by team">
+          <button type="button" data-team="ALL" class="active">ALL</button>
+          <button type="button" data-team="N">TEAM N</button>
+          <button type="button" data-team="P">TEAM P</button>
+          <button type="button" data-team="T">TEAM T</button>
+          <button type="button" data-team="Trainee">TRAINEE</button>
+        </div>
+        <div id="loading-overlay">
+          <div class="spinner-ring"></div>
+          <div>Loading NPT48 data...</div>
+        </div>
+        <div class="member-grid" id="member-grid"></div>
+      </div>
+
+      <!-- Member detail: profile#<nickname> -->
+      <div id="detail-view" hidden>
+        <div class="prof-detail" data-pop>
+          <div class="ph"><img id="m-img" src="assets/images/logo.png" alt=""></div>
+          <div class="status">
+            <h2><b id="m-name"></b><span id="m-names"></span></h2>
+            <dl id="m-info"></dl>
+            <div class="prof-sns" id="m-social"></div>
+          </div>
+        </div>
+        <p class="back"><a href="profile" class="more" id="backToList">BACK</a></p>
+      </div>
+    </div>
+  </main>
+
+  <div id="site-footer"></div>
+
+  <script>
+    var membersData = [];
+    var currentMemberName = null;
+    var currentTeamFilter = 'ALL';
+
+    function esc(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+      });
+    }
+
+    function init() {
+      if (!window.NPT48_DATA.isConfigured()) {
+        document.getElementById('loading-overlay').innerHTML = 'Google Sheets not connected yet — set SCRIPT_URL in <code>assets/js/data.js</code>';
+        return;
+      }
+      window.NPT48_DATA.fetchSheet('Profile')
+        .then(function (data) {
+          membersData = data;
+          document.getElementById('loading-overlay').style.display = 'none';
+          renderGrid();
+          openFromHash();
+        })
+        .catch(function () {
+          document.getElementById('loading-overlay').innerHTML = 'Unable to load data. Please try again later.';
+        });
+    }
+
+    // Members open as profile#<nickname> (from the grid below or the home page)
+    function openFromHash() {
+      var name = decodeURIComponent(window.location.hash.slice(1));
+      if (!name || !viewDetail(name)) showList();
+    }
+
+    window.addEventListener('hashchange', function () {
+      if (membersData.length) { openFromHash(); window.scrollTo(0, 0); }
+    });
+
+    document.getElementById('teamTabs').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-team]');
+      if (!b) return;
+      currentTeamFilter = b.getAttribute('data-team');
+      this.querySelectorAll('button').forEach(function (x) { x.classList.toggle('active', x === b); });
+      renderGrid();
+    });
+
+    document.getElementById('backToList').addEventListener('click', function (e) {
+      e.preventDefault();
+      history.pushState(null, '', window.location.pathname + window.location.search);
+      showList();
+      window.scrollTo(0, 0);
+    });
+
+    function renderGrid() {
+      var grid = document.getElementById('member-grid');
+      if (!membersData.length) {
+        grid.innerHTML = '<p class="data-empty">Unable to load data. Please try again later.</p>';
+        return;
+      }
+
+      var list = currentTeamFilter === 'ALL' ? membersData.slice() : membersData.filter(function (m) {
+        return (m.team || '').toString() === currentTeamFilter;
+      });
+      list.sort(function (a, b) { return (a.name || '').localeCompare(b.name || ''); });
+
+      if (!list.length) {
+        grid.innerHTML = '<p class="data-empty" style="grid-column:1/-1">No members found.</p>';
+        return;
+      }
+
+      grid.innerHTML = list.map(function (m, i) {
+        var img = window.NPT48_DATA.getDirectImgLink(m.image);
+        return '' +
+          '<a href="#' + encodeURIComponent(m.name) + '" class="member-tile' + (m.name === currentMemberName ? ' active' : '') + '" data-name="' + esc(m.name) + '" data-pop style="--i:' + (i % 3) + '">' +
+            '<div class="member-photo"><img src="' + esc(img) + '" alt="' + esc(m.name) + '" loading="lazy" decoding="async" onerror="NPT48_DATA.imgFallback(this)"></div>' +
+            '<div class="member-name">' + esc(String(m.name).toUpperCase()) + (m.fullNameTH ? '<small>' + esc(m.fullNameTH) + '</small>' : '') + '</div>' +
+          '</a>';
+      }).join('');
+      if (window.NPT48_POPIN) window.NPT48_POPIN.init();
+    }
+
+    function viewDetail(nickname) {
+      var m = membersData.find(function (item) { return item.name === nickname; });
+      if (!m) return false;
+      currentMemberName = nickname;
+      var img = document.getElementById('m-img');
+      img.src = window.NPT48_DATA.getDirectImgLink(m.image);
+      img.alt = m.name;
+      img.onerror = function () { window.NPT48_DATA.imgFallback(img); };
+      document.getElementById('m-name').textContent = String(m.name).toUpperCase();
+      // The sheet's "fullNameTH" column holds the romanised name and "fullNameEN" the Thai one
+      document.getElementById('m-names').textContent = [m.fullNameTH, m.fullNameEN].filter(Boolean).join(' / ');
+
+      var infoList = [
+        ['BIRTHDAY', m.birthday],
+        ['GENERATION', m.generation],
+        ['TEAM', m.team],
+        ['OSHI MARK', m.oshiMark],
+        ['PROVINCE', m.province],
+        ['BLOOD TYPE', m.bloodType],
+        ['LIKES', m.like],
+        ['HOBBY', m.hobby]
+      ];
+      document.getElementById('m-info').innerHTML = infoList.map(function (it) {
+        return '<dt>' + it[0] + '</dt><dd>' + esc(it[1] || '-') + '</dd>';
+      }).join('');
+
+      document.getElementById('m-social').innerHTML = (m.instagram && m.instagram !== '-')
+        ? '<a href="' + esc(m.instagram) + '" target="_blank" rel="noopener" aria-label="Instagram">' + window.NPT48_ICONS.instagram + '</a>'
+        : '';
+
+      document.title = String(m.name).toUpperCase() + ' | PROFILE | NPT48 OFFICIAL SITE';
+      document.getElementById('list-view').hidden = true;
+      document.getElementById('detail-view').hidden = false;
+      if (window.NPT48_POPIN) window.NPT48_POPIN.init();
+      return true;
+    }
+
+    function showList() {
+      currentMemberName = null;
+      document.title = 'PROFILE | NPT48 OFFICIAL SITE';
+      document.getElementById('detail-view').hidden = true;
+      document.getElementById('list-view').hidden = false;
+    }
+
+    init();
+  </script>
+</body>
+</html>
